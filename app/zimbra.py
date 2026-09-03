@@ -1,6 +1,12 @@
 import base64, hashlib, io, shlex
 import paramiko
 
+def required_int(value,label):
+    text=str(value or "").strip().replace(",","")
+    if not text: raise RuntimeError(f"Zimbra returned an empty value for {label}")
+    try: return int(text)
+    except ValueError as e: raise RuntimeError(f"Zimbra returned an invalid value for {label}: {text!r}") from e
+
 class FingerprintPolicy(paramiko.MissingHostKeyPolicy):
     def __init__(self, expected): self.expected=expected.removeprefix("SHA256:").strip()
     def missing_host_key(self,client,hostname,key):
@@ -12,7 +18,7 @@ class ZimbraClient:
     def __init__(self,cfg): self.cfg=cfg; self.client=None
     def __enter__(self):
         c=paramiko.SSHClient(); c.load_system_host_keys(); c.set_missing_host_key_policy(FingerprintPolicy(self.cfg.get("zimbra_host_fingerprint","")))
-        args=dict(hostname=self.cfg["zimbra_host"],port=int(self.cfg["zimbra_port"]),username=self.cfg["zimbra_user"],timeout=20)
+        args=dict(hostname=self.cfg["zimbra_host"],port=int(self.cfg.get("zimbra_port") or 22),username=self.cfg["zimbra_user"],timeout=20)
         if self.cfg.get("zimbra_auth")=="password": args["password"]=self.cfg.get("zimbra_password")
         else: args["pkey"]=paramiko.RSAKey.from_private_key(io.StringIO(self.cfg["zimbra_private_key"]))
         c.connect(**args); self.client=c; return self
@@ -22,17 +28,22 @@ class ZimbraClient:
         stdout=out.read().decode(errors="replace"); stderr=err.read().decode(errors="replace")
         if code: raise RuntimeError(stderr.strip() or f"remote command failed ({code})")
         return stdout.strip()
-    def zrun(self,command): return self.run(f'{self.cfg["zimbra_sudo_prefix"]} {command}')
+    def zrun(self,command):
+        prefix=self.cfg.get("zimbra_sudo_prefix","").strip()
+        return self.run(f"{prefix} {command}" if prefix else command)
     def check(self):
         version=self.zrun("zmcontrol -v"); self.zrun("command -v zmprov && command -v zmmailbox"); return version
     def accounts(self,query="",limit=200):
         return [x for x in self.zrun("zmprov -l gaa").splitlines() if query.lower() in x.lower()][:limit]
     def mailbox_size(self,account):
         raw=self.zrun(f"zmmailbox -z -m {shlex.quote(account)} gms")
-        return int(raw.split()[0].replace(",",""))
+        if not raw.split(): raise RuntimeError("zmmailbox gms returned an empty mailbox size")
+        return required_int(raw.split()[0],"mailbox size")
     def prepare_tgz(self,account,remote_path):
         self.zrun(f"zmmailbox -z -m {shlex.quote(account)} getRestURL '//?fmt=tgz' > {shlex.quote(remote_path)}")
-        return int(self.run(f"stat -c %s {shlex.quote(remote_path)}"))
-    def free_bytes(self,path): return int(self.run(f"df -PB1 --output=avail {shlex.quote(path)} | tail -1"))
+        return required_int(self.run(f"stat -c %s {shlex.quote(remote_path)}"),"TGZ size")
+    def free_bytes(self,path):
+        stats=self.client.open_sftp().statvfs(path)
+        return int(stats.f_bavail*stats.f_frsize)
     def download(self,remote,local): self.client.open_sftp().get(remote,local)
     def remove(self,remote): self.run(f"rm -f -- {shlex.quote(remote)}")
