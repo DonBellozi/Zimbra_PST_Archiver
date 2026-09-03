@@ -1,9 +1,9 @@
 services:
   web:
     build: .
-    env_file: [.env]
     environment:
       DATABASE_URL: sqlite:////data/db/archiver.sqlite3
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?Set APP_SECRET_KEY in stack environment}
     ports: ["8085:8085"]
     volumes:
       - workdata:/data/work
@@ -14,9 +14,9 @@ services:
   worker:
     build: .
     command: ["python", "-m", "app.worker"]
-    env_file: [.env]
     environment:
       DATABASE_URL: sqlite:////data/db/archiver.sqlite3
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?Set APP_SECRET_KEY in stack environment}
     volumes:
       - workdata:/data/work
       - pstdata:/data/pst
