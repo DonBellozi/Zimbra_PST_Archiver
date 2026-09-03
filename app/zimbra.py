@@ -7,6 +7,13 @@ def required_int(value,label):
     try: return int(text)
     except ValueError as e: raise RuntimeError(f"Zimbra returned an invalid value for {label}: {text!r}") from e
 
+def parse_df_free(output):
+    lines=[line for line in output.splitlines() if line.strip()]
+    if len(lines)<2: raise RuntimeError(f"Zimbra returned an invalid df response: {output!r}")
+    columns=lines[-1].split()
+    if len(columns)<6: raise RuntimeError(f"Zimbra returned an invalid df row: {lines[-1]!r}")
+    return required_int(columns[3],"free space")*1024
+
 class FingerprintPolicy(paramiko.MissingHostKeyPolicy):
     def __init__(self, expected): self.expected=expected.removeprefix("SHA256:").strip()
     def missing_host_key(self,client,hostname,key):
@@ -43,7 +50,7 @@ class ZimbraClient:
         self.zrun(f"zmmailbox -z -m {shlex.quote(account)} getRestURL '//?fmt=tgz' > {shlex.quote(remote_path)}")
         return required_int(self.run(f"stat -c %s {shlex.quote(remote_path)}"),"TGZ size")
     def free_bytes(self,path):
-        stats=self.client.open_sftp().statvfs(path)
-        return int(stats.f_bavail*stats.f_frsize)
+        output=self.run(f"LC_ALL=C df -Pk {shlex.quote(path)}")
+        return parse_df_free(output)
     def download(self,remote,local): self.client.open_sftp().get(remote,local)
     def remove(self,remote): self.run(f"rm -f -- {shlex.quote(remote)}")
