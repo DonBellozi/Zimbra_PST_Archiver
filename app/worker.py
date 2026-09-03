@@ -2,6 +2,7 @@ import os, shutil, time, traceback
 from datetime import timedelta
 from sqlalchemy import select
 from .db import Base, engine, SessionLocal
+from .config import env
 from .models import Job, JobEvent, JobStatus, now
 from .settings import get_all
 from .zimbra import ZimbraClient
@@ -23,7 +24,7 @@ def enough(free,needed,reserve): return free >= needed+reserve
 def claim(db):
     retry_before=now()-timedelta(seconds=60)
     q=(select(Job).where((Job.status==JobStatus.QUEUED)|((Job.status.in_([JobStatus.WAITING_FOR_SPACE,JobStatus.STORED_ON_NAS]))&(Job.updated_at<retry_before)))
-       .order_by(Job.created_at).with_for_update(skip_locked=True).limit(1))
+       .order_by(Job.created_at).limit(1))
     job=db.execute(q).scalar_one_or_none()
     if job: job.updated_at=now(); db.commit()
     return job
@@ -94,6 +95,8 @@ def cleanup(db):
     db.commit()
 
 def main():
+    if env.database_url.startswith("sqlite:////"):
+        os.makedirs(os.path.dirname(env.database_url.removeprefix("sqlite:///")),exist_ok=True)
     Base.metadata.create_all(engine)
     while True:
         with SessionLocal() as db:

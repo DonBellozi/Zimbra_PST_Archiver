@@ -20,7 +20,10 @@ app.mount("/static",StaticFiles(directory="app/static"),name="static")
 templates=Jinja2Templates(directory="app/templates")
 
 @app.on_event("startup")
-def startup(): Base.metadata.create_all(engine)
+def startup():
+    if env.database_url.startswith("sqlite:////"):
+        os.makedirs(os.path.dirname(env.database_url.removeprefix("sqlite:///")),exist_ok=True)
+    Base.metadata.create_all(engine)
 
 def current(request: Request,db: Session):
     uid=request.session.get("uid"); return db.get(User,uid) if uid else None
