@@ -81,3 +81,13 @@ def test_repairs_subject_recipient_and_attachment_filename():
     assert str(parsed["Subject"])==subject
     assert person in str(parsed["To"])
     assert parsed.get_filename()==filename
+
+def test_rewrites_valid_koi8_headers_as_utf8():
+    wanted="Камера и чертёж"
+    from email.header import Header
+    encoded=Header(wanted,"koi8-r").encode()
+    normalized=normalize_eml(f"Subject: {encoded}\r\n\r\nBody".encode("ascii"))
+    assert b"koi8-r" not in normalized.lower()
+    assert b"utf-8" in normalized.lower()
+    parsed=BytesParser(policy=policy.default).parsebytes(normalized)
+    assert str(parsed["Subject"])==wanted
