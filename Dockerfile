@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
     && git clone --depth 1 --branch "$CONTINUMAIL_REF" https://github.com/ContinuMail/continumail-converter.git /src/continumail \
     && dotnet publish /src/continumail/src/Mail2Pst.Cli/Mail2Pst.Cli.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o /out
 
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssh-client ca-certificates gosu libicu72 && rm -rf /var/lib/apt/lists/*

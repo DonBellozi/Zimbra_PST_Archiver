@@ -32,6 +32,8 @@ Worker по умолчанию один. Он получает размер mail
 
 В экспериментальной сборке по умолчанию используется [ContinuMail Converter v0.3.3](https://github.com/ContinuMail/continumail-converter/releases/tag/v0.3.3), свободный Linux CLI под GPLv3. Он собирается из зафиксированного тега в отдельной Docker-стадии как self-contained .NET 8 binary. Проект использует модифицированный LGPLv3 PSTFileFormat writer и MimeKit.
 
+Runtime зафиксирован на Debian Bookworm (`python:3.12-slim-bookworm`), поскольку self-contained ContinuMail использует системный ICU 72. Не заменяйте его плавающим тегом `python:3.12-slim`: на более новом Debian имя пакета ICU отличается.
+
 Адаптер безопасно читает из TGZ только `.eml`, отклоняет небезопасные пути, потоково формирует MBOX для каждой папки и передает их ContinuMail с `targetFolderPath`. После конвертации он требует нулевое число пропусков и точное совпадение числа входных/выходных сообщений. Команда по умолчанию:
 
 ```text
