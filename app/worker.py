@@ -81,7 +81,7 @@ def process(db,job):
     if not resume_ready_pst:
         if os.path.exists(pst): os.remove(pst)
         transition(db,job,JobStatus.CONVERTING,"Running configured PST writer",60)
-        CommandConverter(cfg["converter_command"]).convert(local_tgz,pst)
+        CommandConverter(cfg["converter_command"]).convert(local_tgz,pst,store_name=job.account)
     transition(db,job,JobStatus.VERIFYING,"Verifying PST signature and size",90)
     job.pst_bytes=verify_pst(pst); job.pst_path=pst
     if cfg["nas_enabled"]=="true":

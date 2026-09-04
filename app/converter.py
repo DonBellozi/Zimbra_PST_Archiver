@@ -4,9 +4,11 @@ class ConverterUnavailable(RuntimeError): pass
 
 class CommandConverter:
     def __init__(self,command): self.command=command
-    def convert(self,tgz,pst):
+    def convert(self,tgz,pst,store_name=None):
         if not self.command: raise ConverterUnavailable("PST converter is not configured; TGZ retained for retry")
-        result=subprocess.run(shlex.split(self.command)+[tgz,pst],capture_output=True,text=True,timeout=86400)
+        process_env=os.environ.copy()
+        if store_name: process_env["PST_STORE_NAME"]=store_name
+        result=subprocess.run(shlex.split(self.command)+[tgz,pst],capture_output=True,text=True,timeout=86400,env=process_env)
         if result.returncode: raise RuntimeError(result.stderr[-2000:] or "converter failed")
         if not os.path.isfile(pst) or os.path.getsize(pst)<512: raise RuntimeError("converter did not create a usable PST")
 
