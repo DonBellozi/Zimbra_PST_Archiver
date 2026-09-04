@@ -2,6 +2,7 @@ import os, tarfile
 from app.converter import count_messages, verify_pst
 from app.worker import enough, sanitize
 from app.zimbra import parse_df_free
+from app.eml2pst_adapter import extract_eml
 
 def test_space_reserve():
     assert enough(110,100,10)
@@ -22,3 +23,16 @@ def test_verify_pst_signature(tmp_path):
 def test_parse_posix_df():
     output="Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/sda1 100000 25000 75000 25% /tmp"
     assert parse_df_free(output)==75000*1024
+
+def test_adapter_extracts_only_eml(tmp_path):
+    source=tmp_path/"source"; source.mkdir()
+    (source/"one.eml").write_text("Subject: test\n\nBody")
+    (source/"ignore.txt").write_text("ignore")
+    tgz=tmp_path/"mail.tgz"
+    with tarfile.open(tgz,"w:gz") as tf:
+        tf.add(source/"one.eml",arcname="Inbox/one.eml")
+        tf.add(source/"ignore.txt",arcname="Inbox/ignore.txt")
+    target=tmp_path/"out"; target.mkdir()
+    assert extract_eml(tgz,target)==1
+    assert (target/"Inbox"/"one.eml").is_file()
+    assert not (target/"Inbox"/"ignore.txt").exists()

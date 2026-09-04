@@ -81,17 +81,29 @@ def process(db,job):
     CommandConverter(cfg["converter_command"]).convert(local_tgz,pst)
     transition(db,job,JobStatus.VERIFYING,"Verifying PST signature and size",90)
     job.pst_bytes=verify_pst(pst); job.pst_path=pst
+    preserve=cfg.get("delete_tgz_after_success","false")!="true"
     if job.remote_tgz:
         with ZimbraClient(cfg) as z: z.remove(job.remote_tgz)
-    if os.path.exists(local_tgz): os.remove(local_tgz)
-    if job.nas_tgz and os.path.exists(job.nas_tgz): os.remove(job.nas_tgz)
-    job.remote_tgz=job.local_tgz=job.nas_tgz=None; job.completed_at=now(); job.expires_at=now()+timedelta(days=14)
-    transition(db,job,JobStatus.COMPLETED,"PST completed and TGZ removed",100)
+        job.remote_tgz=None
+    if preserve and cfg["nas_enabled"]=="true" and os.path.exists(local_tgz):
+        os.makedirs(cfg["nas_dir"],exist_ok=True)
+        nas=job.nas_tgz or os.path.join(cfg["nas_dir"],f"{job.id}-{sanitize(job.account)}.tgz")
+        if not os.path.exists(nas): shutil.copy2(local_tgz,nas)
+        job.nas_tgz=nas; os.remove(local_tgz); job.local_tgz=None
+    elif not preserve:
+        if os.path.exists(local_tgz): os.remove(local_tgz)
+        if job.nas_tgz and os.path.exists(job.nas_tgz): os.remove(job.nas_tgz)
+        job.local_tgz=job.nas_tgz=None
+    job.completed_at=now(); job.expires_at=now()+timedelta(days=14)
+    message="PST completed; source TGZ retained for manual validation" if preserve else "PST completed and TGZ removed"
+    transition(db,job,JobStatus.COMPLETED,message,100)
 
 def cleanup(db):
     for job in db.scalars(select(Job).where(Job.status==JobStatus.COMPLETED,Job.expires_at<now())):
-        if job.pst_path and os.path.exists(job.pst_path): os.remove(job.pst_path)
-        job.status=JobStatus.EXPIRED; job.pst_path=None; db.add(JobEvent(job_id=job.id,status="EXPIRED",message="PST retention expired"))
+        for path in (job.pst_path,job.local_tgz,job.nas_tgz):
+            if path and os.path.exists(path): os.remove(path)
+        job.status=JobStatus.EXPIRED; job.pst_path=job.local_tgz=job.nas_tgz=None
+        db.add(JobEvent(job_id=job.id,status="EXPIRED",message="Artifact retention expired"))
     db.commit()
 
 def main():

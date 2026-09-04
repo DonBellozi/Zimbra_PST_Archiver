@@ -3,7 +3,7 @@ from .models import Setting
 from .security import encrypt, decrypt
 
 SECRET_KEYS={"zimbra_password","zimbra_private_key","zimbra_host_fingerprint","nas_password","converter_command"}
-DEFAULTS={"zimbra_host":"","zimbra_port":"22","zimbra_user":"root","zimbra_auth":"key","zimbra_sudo_prefix":"sudo -u zimbra","work_dir":"/data/work","pst_dir":"/data/pst","nas_enabled":"false","nas_dir":"/data/nas","retention_days":"14","min_free_gb":"10","space_factor":"4.0","concurrency":"1","converter_command":""}
+DEFAULTS={"zimbra_host":"","zimbra_port":"22","zimbra_user":"root","zimbra_auth":"key","zimbra_sudo_prefix":"sudo -u zimbra","work_dir":"/data/work","pst_dir":"/data/pst","nas_enabled":"false","nas_dir":"/data/nas","retention_days":"14","min_free_gb":"10","space_factor":"4.0","concurrency":"1","converter_command":"/usr/local/bin/python -m app.eml2pst_adapter","delete_tgz_after_success":"false"}
 
 def get_all(db: Session, secrets=False):
     rows={x.key:(decrypt(x.value) if x.encrypted else x.value) for x in db.query(Setting).all()}
