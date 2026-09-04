@@ -1,8 +1,10 @@
 import os, tarfile
+from email import policy
+from email.parser import BytesParser
 from app.converter import count_messages, verify_pst
 from app.worker import enough, sanitize
 from app.zimbra import parse_df_free
-from app.continumail_adapter import mboxrd, tgz_to_mboxes
+from app.continumail_adapter import mboxrd, normalize_eml, tgz_to_mboxes
 
 def test_space_reserve():
     assert enough(110,100,10)
@@ -39,3 +41,10 @@ def test_adapter_builds_mbox_sources(tmp_path):
 
 def test_mboxrd_escapes_from_lines():
     assert b"\n>From body\n" in mboxrd(b"Subject: x\r\n\r\nFrom body\r\n")
+
+def test_normalizes_legacy_koi8_body():
+    body="Направляю шесть камер".encode("koi8-r")
+    eml=b"Subject: test\r\nContent-Type: text/plain; charset=iso-8859-1\r\n\r\n"+body
+    normalized=normalize_eml(eml)
+    parsed=BytesParser(policy=policy.default).parsebytes(normalized)
+    assert parsed.get_payload(decode=True).decode("utf-8")=="Направляю шесть камер"

@@ -77,10 +77,20 @@ def process(db,job):
     estimated=int((job.tgz_bytes or 0)*float(cfg["space_factor"]))
     if not enough(local_free(cfg["pst_dir"]),estimated,reserve):
         job.resume_status=JobStatus.CONVERTING.value; transition(db,job,JobStatus.WAITING_FOR_SPACE,"Not enough PST storage",55); return
-    transition(db,job,JobStatus.CONVERTING,"Running configured PST writer",60)
-    CommandConverter(cfg["converter_command"]).convert(local_tgz,pst)
+    resume_ready_pst=(job.status==JobStatus.WAITING_FOR_SPACE and job.resume_status==JobStatus.VERIFYING.value and os.path.exists(pst))
+    if not resume_ready_pst:
+        if os.path.exists(pst): os.remove(pst)
+        transition(db,job,JobStatus.CONVERTING,"Running configured PST writer",60)
+        CommandConverter(cfg["converter_command"]).convert(local_tgz,pst)
     transition(db,job,JobStatus.VERIFYING,"Verifying PST signature and size",90)
     job.pst_bytes=verify_pst(pst); job.pst_path=pst
+    if cfg["nas_enabled"]=="true":
+        os.makedirs(cfg["nas_dir"],exist_ok=True)
+        if not enough(local_free(cfg["nas_dir"]),job.pst_bytes,reserve):
+            job.resume_status=JobStatus.VERIFYING.value
+            transition(db,job,JobStatus.WAITING_FOR_SPACE,"PST ready locally, but NAS has insufficient space",95); return
+        nas_pst=os.path.join(cfg["nas_dir"],os.path.basename(pst))
+        shutil.copy2(pst,nas_pst); job.pst_path=nas_pst; os.remove(pst); db.commit()
     preserve=cfg.get("delete_tgz_after_success","false")!="true"
     if job.remote_tgz:
         with ZimbraClient(cfg) as z: z.remove(job.remote_tgz)

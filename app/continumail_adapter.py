@@ -1,8 +1,40 @@
 """Convert a Zimbra TGZ to PST through ContinuMail's Linux CLI."""
 import json, os, re, shutil, subprocess, sys, tarfile, tempfile
+from email import policy
+from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
 
 CLI=Path(os.environ.get("CONTINUMAIL_CLI","/opt/continumail/Mail2Pst.Cli"))
+
+def _score_russian(text):
+    cyr=sum("А"<=c<="я" or c in "Ёё" for c in text)
+    bad=text.count("�")+sum(ord(c)<32 and c not in "\r\n\t" for c in text)
+    lower=text.lower()
+    common=sum(lower.count(pair) for pair in ("ст","но","на","ен","ов","ни","ра","ко","то","пр","по","ро","го","ал","ер","ть","ли"))
+    return cyr*3+common*5-bad*20
+
+def normalize_eml(data):
+    """Normalize legacy text bodies (not attachments) to UTF-8."""
+    try: message=BytesParser(policy=policy.SMTP).parsebytes(data)
+    except Exception: return data
+    changed=False
+    for part in message.walk():
+        if part.get_content_maintype()!="text" or part.is_multipart(): continue
+        raw=part.get_payload(decode=True)
+        if raw is None: continue
+        declared=part.get_content_charset() or "ascii"
+        candidates=[]
+        for charset in (declared,"utf-8","koi8-r","cp1251","iso-8859-5"):
+            try:
+                text=raw.decode(charset)
+                candidates.append((_score_russian(text),charset,text))
+            except (UnicodeDecodeError,LookupError): pass
+        if not candidates: continue
+        _,chosen,text=max(candidates,key=lambda x:x[0])
+        if chosen.lower()!=declared.lower() or declared.lower() not in ("utf-8","us-ascii","ascii"):
+            if part.get("Content-Transfer-Encoding"): del part["Content-Transfer-Encoding"]
+            part.set_payload(text,charset="utf-8"); changed=True
+    return message.as_bytes(policy=policy.SMTP) if changed else data
 
 def mboxrd(data):
     data=data.replace(b"\r\n",b"\n").replace(b"\r",b"\n")
@@ -26,7 +58,7 @@ def tgz_to_mboxes(tgz,root):
                     handles[folder]=path.open("ab"); counts[folder]=0
                 source=tf.extractfile(member)
                 if source is None: continue
-                with source: handles[folder].write(mboxrd(source.read()))
+                with source: handles[folder].write(mboxrd(normalize_eml(source.read())))
                 counts[folder]+=1; total+=1
     finally:
         for handle in handles.values(): handle.close()
