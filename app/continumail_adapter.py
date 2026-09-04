@@ -44,11 +44,43 @@ def _text_candidates(raw,declared):
                 if repaired not in seen:
                     seen.add(repaired); yield f"{charset}/{bridge}->{legacy}",repaired
 
+def _repair_header_text(text):
+    """Repair already-decoded mojibake in MIME headers and parameters."""
+    candidates=[(_score_russian(text),text)]
+    for bridge,target in (("latin-1","cp1251"),("latin-1","koi8-r"),
+                          ("cp1252","cp1251"),("cp1252","koi8-r"),
+                          ("cp1251","utf-8")):
+        try: repaired=text.encode(bridge).decode(target)
+        except (UnicodeEncodeError,UnicodeDecodeError): continue
+        candidates.append((_score_russian(repaired),repaired))
+    return max(candidates,key=lambda item:item[0])[1]
+
+def _normalize_headers(message):
+    changed=False
+    # These fields contain the Outlook subject and displayed participant names.
+    for name in ("Subject","From","To","Cc","Bcc","Reply-To","Sender","Content-Description"):
+        values=message.get_all(name,[])
+        if not values: continue
+        repaired=[_repair_header_text(str(value)) for value in values]
+        if repaired!=[str(value) for value in values]:
+            del message[name]
+            for value in repaired: message[name]=value
+            changed=True
+    for part in message.walk():
+        for header,param in (("Content-Disposition","filename"),("Content-Type","name")):
+            value=part.get_param(param,header=header)
+            if not value: continue
+            repaired=_repair_header_text(str(value))
+            if repaired!=value:
+                part.set_param(param,repaired,header=header,charset="utf-8",replace=True)
+                changed=True
+    return changed
+
 def normalize_eml(data):
     """Normalize legacy text bodies (not attachments) to UTF-8."""
     try: message=BytesParser(policy=policy.SMTP).parsebytes(data)
     except Exception: return data
-    changed=False
+    changed=_normalize_headers(message)
     for part in message.walk():
         if part.get_content_maintype()!="text" or part.is_multipart(): continue
         raw=part.get_payload(decode=True)

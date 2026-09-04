@@ -2,7 +2,7 @@ import os, tarfile
 from email import policy
 from email.parser import BytesParser
 from app.converter import count_messages, verify_pst
-from app.worker import enough, sanitize
+from app.worker import enough, sanitize, sanitize_email
 from app.zimbra import parse_df_free
 from app.continumail_adapter import mboxrd, normalize_eml, tgz_to_mboxes
 
@@ -11,6 +11,7 @@ def test_space_reserve():
     assert not enough(109,100,10)
 
 def test_safe_filename(): assert sanitize("a/user@example.com") == "a_user_example.com"
+def test_safe_email_filename(): assert sanitize_email("user@example.com") == "user@example.com"
 
 def test_count_messages(tmp_path):
     eml=tmp_path/"one.eml"; eml.write_text("Subject: x\n\nbody")
@@ -65,3 +66,18 @@ def test_repairs_utf8_saved_cp1251_mojibake():
     normalized=normalize_eml(eml)
     parsed=BytesParser(policy=policy.default).parsebytes(normalized)
     assert parsed.get_payload(decode=True).decode("utf-8")==wanted
+
+def test_repairs_subject_recipient_and_attachment_filename():
+    subject="Камера В1.1-4"
+    person="Павел Сергеевич"
+    filename="Чертёж камеры.dwg"
+    damage=lambda value: value.encode("koi8-r").decode("latin-1")
+    eml=(f"Subject: {damage(subject)}\r\n"
+         f'To: "{damage(person)}" <user@example.com>\r\n'
+         "MIME-Version: 1.0\r\n"
+         f'Content-Type: application/octet-stream; name="{damage(filename)}"\r\n'
+         f'Content-Disposition: attachment; filename="{damage(filename)}"\r\n\r\n').encode("utf-8")
+    parsed=BytesParser(policy=policy.default).parsebytes(normalize_eml(eml))
+    assert str(parsed["Subject"])==subject
+    assert person in str(parsed["To"])
+    assert parsed.get_filename()==filename

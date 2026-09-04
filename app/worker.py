@@ -36,11 +36,22 @@ def cancelled(db,job):
     return False
 
 def sanitize(value): return "".join(c if c.isalnum() or c in ".-_" else "_" for c in value)
+def sanitize_email(value): return "".join(c if c.isalnum() or c in ".-_@" else "_" for c in value)
+
+def pst_filename(job,duplicate=False):
+    date=job.created_at.strftime("%Y%m%d")
+    suffix=f"-{job.created_at.strftime('%H%M%S')}" if duplicate else ""
+    return f"{date}-{sanitize_email(job.account)}{suffix}.pst"
 
 def process(db,job):
     cfg=get_all(db,secrets=True); reserve=int(float(cfg["min_free_gb"])*GB)
     work=os.path.join(cfg["work_dir"],str(job.id)); os.makedirs(work,exist_ok=True)
-    local_tgz=os.path.join(work,"mailbox.tgz"); pst=os.path.join(cfg["pst_dir"],f"{job.id}-{sanitize(job.account)}.pst")
+    local_tgz=os.path.join(work,"mailbox.tgz")
+    filename=pst_filename(job)
+    owned_name=os.path.basename(job.pst_path) if job.pst_path else None
+    duplicate=(owned_name!=filename and db.scalar(select(Job.id).where(Job.id!=job.id,Job.pst_path.like(f"%/{filename}"))) is not None)
+    if duplicate: filename=pst_filename(job,duplicate=True)
+    pst=os.path.join(cfg["pst_dir"],filename)
     os.makedirs(cfg["pst_dir"],exist_ok=True)
     if job.nas_tgz and not os.path.exists(local_tgz):
         transition(db,job,JobStatus.CHECKING_SPACE,"Checking space to restore TGZ",35)
