@@ -91,3 +91,11 @@ def test_rewrites_valid_koi8_headers_as_utf8():
     assert b"utf-8" in normalized.lower()
     parsed=BytesParser(policy=policy.default).parsebytes(normalized)
     assert str(parsed["Subject"])==wanted
+
+def test_unfolds_malformed_header_values_safely():
+    raw=b"Subject: first\r\n second\r\nTo: user@example.com\r\n\r\nBody"
+    normalized=normalize_eml(raw)
+    parsed=BytesParser(policy=policy.default).parsebytes(normalized)
+    assert "\r" not in str(parsed["Subject"])
+    assert "\n" not in str(parsed["Subject"])
+    assert str(parsed["Subject"])=="first second"

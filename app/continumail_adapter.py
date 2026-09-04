@@ -55,6 +55,15 @@ def _repair_header_text(text):
         candidates.append((_score_russian(repaired),repaired))
     return max(candidates,key=lambda item:item[0])[1]
 
+def _safe_header_value(value):
+    """Unfold malformed legacy headers before storing them again.
+
+    HeaderRegistry can expose embedded CR/LF from broken source messages, while
+    Message.__setitem__ correctly rejects them as a header-injection risk.
+    """
+    value=re.sub(r"[\r\n]+[ \t]*"," ",str(value))
+    return "".join(" " if ord(char)<32 or ord(char)==127 else char for char in value).strip()
+
 def _normalize_headers(message):
     changed=False
     # Always rewrite these fields. Even correctly declared KOI8-R/CP1251 headers
@@ -63,7 +72,7 @@ def _normalize_headers(message):
     for name in ("Subject","From","To","Cc","Bcc","Reply-To","Sender","Content-Description"):
         values=message.get_all(name,[])
         if not values: continue
-        repaired=[_repair_header_text(str(value)) for value in values]
+        repaired=[_safe_header_value(_repair_header_text(str(value))) for value in values]
         del message[name]
         for value in repaired: message[name]=value
         changed=True
@@ -71,7 +80,7 @@ def _normalize_headers(message):
         for header,param in (("Content-Disposition","filename"),("Content-Type","name")):
             value=part.get_param(param,header=header)
             if not value: continue
-            repaired=_repair_header_text(str(value))
+            repaired=_safe_header_value(_repair_header_text(str(value)))
             part.set_param(param,repaired,header=header,charset="utf-8",replace=True)
             changed=True
     return changed
