@@ -40,7 +40,7 @@ class ZimbraClient:
         return self.run(f"{prefix} {command}" if prefix else command)
     def check(self):
         version=self.zrun("zmcontrol -v"); self.zrun("command -v zmprov && command -v zmmailbox"); return version
-    def accounts(self,query="",limit=200):
+    def accounts(self,query="",limit=20000):
         return [x for x in self.zrun("zmprov -l gaa").splitlines() if query.lower() in x.lower()][:limit]
     def mailbox_size(self,account):
         raw=self.zrun(f"zmmailbox -z -m {shlex.quote(account)} gms")
