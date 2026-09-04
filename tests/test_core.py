@@ -48,3 +48,20 @@ def test_normalizes_legacy_koi8_body():
     normalized=normalize_eml(eml)
     parsed=BytesParser(policy=policy.default).parsebytes(normalized)
     assert parsed.get_payload(decode=True).decode("utf-8")=="Направляю шесть камер"
+
+def test_repairs_utf8_saved_koi8_mojibake():
+    wanted="Направляю шесть камер"
+    damaged=wanted.encode("koi8-r").decode("latin-1")
+    eml=("Subject: test\r\nContent-Type: text/plain; charset=utf-8\r\n"
+         "Content-Transfer-Encoding: 8bit\r\n\r\n").encode()+damaged.encode("utf-8")
+    normalized=normalize_eml(eml)
+    parsed=BytesParser(policy=policy.default).parsebytes(normalized)
+    assert parsed.get_payload(decode=True).decode("utf-8")==wanted
+
+def test_repairs_utf8_saved_cp1251_mojibake():
+    wanted="Получено новое сообщение"
+    damaged=wanted.encode("cp1251").decode("latin-1")
+    eml=("Subject: test\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n").encode()+damaged.encode("utf-8")
+    normalized=normalize_eml(eml)
+    parsed=BytesParser(policy=policy.default).parsebytes(normalized)
+    assert parsed.get_payload(decode=True).decode("utf-8")==wanted

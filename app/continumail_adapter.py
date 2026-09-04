@@ -11,7 +11,38 @@ def _score_russian(text):
     bad=text.count("�")+sum(ord(c)<32 and c not in "\r\n\t" for c in text)
     lower=text.lower()
     common=sum(lower.count(pair) for pair in ("ст","но","на","ен","ов","ни","ра","ко","то","пр","по","ро","го","ал","ер","ть","ли"))
-    return cyr*3+common*5-bad*20
+    mojibake=sum(lower.count(mark) for mark in ("Ð","Ñ","î","á","ð","ô","Á","Ï","Ò"))
+    return cyr*3+common*5-bad*20-mojibake*8
+
+def _text_candidates(raw,declared):
+    """Yield normal text and common Latin-1/CP1252 mojibake repairs.
+
+    The only destination encodings we recognise are UTF-8, Windows-1251 and
+    KOI8-R. Latin-1/CP1252 are used only to reverse an earlier bad decode.
+    """
+    allowed=("utf-8","cp1251","koi8-r")
+    names=[]
+    normalized=declared.lower().replace("_","-")
+    aliases={"windows-1251":"cp1251","windows1251":"cp1251","koi8r":"koi8-r","utf8":"utf-8"}
+    normalized=aliases.get(normalized,normalized)
+    if normalized in allowed: names.append(normalized)
+    names.extend(x for x in allowed if x not in names)
+    seen=set()
+    for charset in names:
+        try: text=raw.decode(charset)
+        except UnicodeDecodeError: continue
+        if text not in seen:
+            seen.add(text); yield charset,text
+        # Typical Zimbra legacy damage: KOI8-R/CP1251 bytes were decoded as
+        # Latin-1 (or CP1252) and that mojibake was then saved as UTF-8.
+        for bridge in ("latin-1","cp1252"):
+            try: legacy_bytes=text.encode(bridge)
+            except UnicodeEncodeError: continue
+            for legacy in ("cp1251","koi8-r"):
+                try: repaired=legacy_bytes.decode(legacy)
+                except UnicodeDecodeError: continue
+                if repaired not in seen:
+                    seen.add(repaired); yield f"{charset}/{bridge}->{legacy}",repaired
 
 def normalize_eml(data):
     """Normalize legacy text bodies (not attachments) to UTF-8."""
@@ -23,12 +54,7 @@ def normalize_eml(data):
         raw=part.get_payload(decode=True)
         if raw is None: continue
         declared=part.get_content_charset() or "ascii"
-        candidates=[]
-        for charset in (declared,"utf-8","koi8-r","cp1251","iso-8859-5"):
-            try:
-                text=raw.decode(charset)
-                candidates.append((_score_russian(text),charset,text))
-            except (UnicodeDecodeError,LookupError): pass
+        candidates=[(_score_russian(text),charset,text) for charset,text in _text_candidates(raw,declared)]
         if not candidates: continue
         _,chosen,text=max(candidates,key=lambda x:x[0])
         if chosen.lower()!=declared.lower() or declared.lower() not in ("utf-8","us-ascii","ascii"):

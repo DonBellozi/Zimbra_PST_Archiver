@@ -1,8 +1,10 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0-bookworm-slim AS continumail-build
 ARG CONTINUMAIL_REF=v0.3.3
+ARG PST_STORE_NAME="Zimbra PST Archive"
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/* \
     && git clone --depth 1 --branch "$CONTINUMAIL_REF" https://github.com/ContinuMail/continumail-converter.git /src/continumail \
-    && find /src/continumail/src -type f -name '*.cs' -exec sed -i 's/ContinuMail Store/Zimbra PST Archive/g' {} + \
+    && grep -RIl --exclude-dir=.git 'ContinuMail Store' /src/continumail | xargs -r sed -i "s/ContinuMail Store/$PST_STORE_NAME/g" \
+    && ! grep -RIl --exclude-dir=.git 'ContinuMail Store' /src/continumail \
     && dotnet publish /src/continumail/src/Mail2Pst.Cli/Mail2Pst.Cli.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o /out
 
 FROM python:3.12-slim-bookworm
