@@ -1,0 +1,3 @@
+email,password,target_email
+user1@old.example,REPLACE_WITH_APP_PASSWORD,user1@new.example
+user2@old.example,"REPLACE,password;with separators",user2@new.example
