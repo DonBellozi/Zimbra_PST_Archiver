@@ -1,0 +1,10 @@
+#imap-import .grid label { min-width: 0; }
+#imap-import input:not([type=checkbox]), #imap-import select { width: 100%; min-width: 0; }
+#imap-import .toolbar { margin: 20px 0; gap: 28px; flex-wrap: wrap; }
+#imap-import .toolbar label { display: flex; align-items: center; gap: 8px; }
+#imap-import .toolbar input { min-width: 0; width: 18px; height: 18px; margin: 0; }
+#imap-import button:disabled { opacity: .45; cursor: default; }
+#migration-jobs td { white-space: pre-line; overflow-wrap: anywhere; }
+#migration-jobs td:last-child { min-width: 250px; max-width: 350px; }
+#migration-jobs button, #migration-jobs .button { font-size: 12px; padding: 7px; margin: 2px; }
+#migration-jobs button:disabled { opacity: .45; cursor: default; }

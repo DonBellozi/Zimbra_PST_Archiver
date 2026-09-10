@@ -1,12 +1,13 @@
 import os, shutil, time, traceback
 from datetime import timedelta
 from sqlalchemy import select
-from .db import Base, engine, SessionLocal
+from .db import Base, engine, SessionLocal, initialize_schema
 from .config import env
 from .models import Job, JobEvent, JobStatus, now
 from .settings import get_all
 from .zimbra import ZimbraClient
 from .converter import CommandConverter, ConverterUnavailable, count_messages, verify_pst
+from . import migration_runner
 
 GB=1024**3
 
@@ -130,10 +131,22 @@ def cleanup(db):
 def main():
     if env.database_url.startswith("sqlite:////"):
         os.makedirs(os.path.dirname(env.database_url.removeprefix("sqlite:///")),exist_ok=True)
-    Base.metadata.create_all(engine)
+    initialize_schema()
+    # Both kinds of jobs share a single worker, including after restarts. Hold
+    # this lock on the local SQLite volume for the lifetime of the process.
+    worker_lock = None
+    if os.name == 'posix':
+        import fcntl
+        from sqlalchemy.engine import make_url
+        lockdir = os.path.dirname(make_url(env.database_url).database) if env.database_url.startswith('sqlite') else '/data/db'
+        worker_lock = open(os.path.join(lockdir or '.', 'worker.lock'), 'a')
+        fcntl.flock(worker_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with SessionLocal() as db:
+        migration_runner.recover(db)
     while True:
         with SessionLocal() as db:
             try:
+                migration_runner.tick(db)
                 cleanup(db); job=claim(db)
                 if job:
                     try: process(db,job)

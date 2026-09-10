@@ -21,3 +21,10 @@ SessionLocal = sessionmaker(engine, expire_on_commit=False)
 def db_session():
     with SessionLocal() as db:
         yield db
+
+def initialize_schema():
+    """Serialise additive SQLite DDL when web and worker start together."""
+    with engine.connect() as connection:
+        if engine.dialect.name == 'sqlite': connection.exec_driver_sql('BEGIN IMMEDIATE')
+        Base.metadata.create_all(connection)
+        connection.commit()

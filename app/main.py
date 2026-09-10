@@ -8,13 +8,14 @@ from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from .config import env
-from .db import Base, engine, db_session
+from .db import Base, engine, db_session, initialize_schema
 from .models import User, Job, JobEvent, JobStatus
 from .security import pwd
 from .settings import get_all, save
 from .zimbra import ZimbraClient
+from .migration_api import make_router
 
-app=FastAPI(title="Zimbra PST Archiver",version="0.1.0")
+app=FastAPI(title="Zimbra PST Archiver",version="0.2.0")
 app.add_middleware(SessionMiddleware,secret_key=env.app_secret_key or "development-only",https_only=False,same_site="lax")
 app.mount("/static",StaticFiles(directory="app/static"),name="static")
 templates=Jinja2Templates(directory="app/templates")
@@ -23,7 +24,7 @@ templates=Jinja2Templates(directory="app/templates")
 def startup():
     if env.database_url.startswith("sqlite:////"):
         os.makedirs(os.path.dirname(env.database_url.removeprefix("sqlite:///")),exist_ok=True)
-    Base.metadata.create_all(engine)
+    initialize_schema()
 
 def current(request: Request,db: Session):
     uid=request.session.get("uid"); return db.get(User,uid) if uid else None
@@ -32,6 +33,8 @@ def guard(request: Request,db: Session=Depends(db_session)):
     user=current(request,db)
     if not user: raise HTTPException(401,"Authentication required")
     return user
+
+app.include_router(make_router(guard, templates))
 
 def initialized(db): return db.query(User).count()>0
 def human(n):

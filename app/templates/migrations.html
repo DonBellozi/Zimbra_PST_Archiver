@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block body %}
+<link rel="stylesheet" href="/static/migrations.css?v=1">
+<h1>Миграция IMAP</h1>
+<p>CSV → исходные письма → Zimbra TGZ и/или Outlook PST. Одна активная задача; остальные ждут в очереди.</p>
+<section class="card">
+<form id="imap-import" data-csrf="{{csrf}}">
+<div class="grid">
+<label>IMAP-сервер<input id="imap-host" value="{{cfg.imap_host}}" placeholder="imap.example.ru" required></label>
+<label>Порт<input id="imap-port" type="number" min="1" max="65535" value="{{cfg.imap_port}}" required></label>
+<label>Защищённое подключение<select id="imap-tls"><option value="ssl" {% if cfg.imap_tls=='ssl' %}selected{% endif %}>TLS (обычно 993)</option><option value="starttls" {% if cfg.imap_tls=='starttls' %}selected{% endif %}>STARTTLS (обычно 143)</option></select></label>
+<label>Сохранять файлы<select id="imap-storage"><option value="nas">NAS — {{cfg.nas_dir}}</option><option value="local">Рабочий диск — {{cfg.work_dir}}</option></select></label>
+</div>
+<div class="toolbar"><label><input type="checkbox" id="imap-tgz" checked> Zimbra TGZ</label><label><input type="checkbox" id="imap-pst"> Outlook PST</label></div>
+<label>CSV в UTF-8: email,password,target_email<input id="imap-csv" type="file" accept=".csv,text/csv" required></label>
+<p class="muted">target_email необязателен. До 500 ящиков; разделитель — запятая или точка с запятой. CSV не сохраняется на сервере, пароли хранятся зашифрованными. Настройки IMAP запоминаются при запуске.</p>
+<button type="button" id="imap-preview">Проверить CSV</button> <button type="submit" id="imap-submit" disabled>Добавить в очередь</button>
+<p id="imap-import-result" role="status"></p>
+</form>
+</section>
+<section class="card">
+<p>Готовые PST удаляются через 14 дней. Исходники и TGZ сохраняются до ручного удаления после проверки миграции.</p>
+<p class="muted">Только почта. TGZ сохраняет папки, даты получения и прочтение. Остальные IMAP-флаги записываются в manifest.jsonl. Пустые папки перечислены в folders.json, но не создаются импортом. PST экспериментальный — проверьте его в Outlook.</p>
+<p class="muted">«Дозагрузить» перечитывает источник и создаёт новый полный экспорт, сохраняя предыдущий. Повторный импорт полного TGZ может создать дубликаты.</p>
+<div class="toolbar"><input id="migration-search" placeholder="Поиск по адресу или статусу"><button id="migration-refresh">Обновить</button></div>
+<p id="migration-summary" role="status"></p>
+<div class="tablewrap"><table><thead><tr><th>Ящик</th><th>Состояние</th><th>Письма / размер</th><th>Файлы</th><th>Действия</th></tr></thead><tbody id="migration-jobs"></tbody></table></div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/migrations.js?v=1"></script>{% endblock %}
